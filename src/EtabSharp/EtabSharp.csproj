@@ -8,7 +8,7 @@
 		<!-- Package Identity -->
 		<Title>EtabSharp</Title>
 		<PackageId>EtabSharp</PackageId>
-		<Version>0.2.0-beta</Version>
+		<Version>0.2.1-beta</Version>
 		<Copyright>Copyright © Thanh Tu 2025</Copyright>
 		<Authors>Thanh Tu</Authors>
 
@@ -29,36 +29,9 @@
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>
-			v0.2.0-beta - Auto-Detection Release 🚀
+			v0.2.1-beta
+			* Fixed: remove behavior to write to console. Now all infor are logged via ILogger.
 
-			✨ BREAKING CHANGE: ETABSv1.dll is NO LONGER shipped in package
-
-			🎯 NEW: Automatic ETABS installation detection!
-			- Zero configuration required
-			- Works with ETABS 21 and 22 and beyond
-			- Automatically finds and references your ETABS installation
-			- Supports both 64-bit and 32-bit installations
-			- Much smaller package size (~99% reduction)
-
-			Features:
-			- Material property management (Concrete, Rebar, Steel)
-			- Frame and area property management
-			- Model generation and modification
-			- Analysis execution and results retrieval
-			- Design integration (steel and concrete)
-			- Automatic version detection
-			- Comprehensive error handling
-			- Full IntelliSense support
-
-			Requirements:
-			- ETABS v21+ must be installed on your system
-			- .NET 10.0 or later
-			- Windows OS
-
-			Migration from v0.1.x:
-			- Simply update the package - no code changes needed
-			- ETABS will be auto-detected from standard installation paths
-			- If custom path needed, set ETABS_INSTALL_DIR environment variable
 		</PackageReleaseNotes>
 
 		<!-- CI/CD Settings -->
