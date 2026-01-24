@@ -59,7 +59,7 @@ var displacements = model.AnalysisResults.GetJointDispl("", eItemTypeElm.Objects
 
 ## Documentation
 
-Full documentation available at [GitHub Wiki](https://github.com/tadodev/EtabSharp/wiki)
+Full documentation available at [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tadodev/EtabSharp)
 
 ## Important Notes
 
