@@ -1,0 +1,91 @@
+﻿<!--
+  EtabSharp MSBuild Targets
+  Automatically detects and references ETABS API DLL
+  
+  This file is included in the NuGet package and automatically
+  runs when projects reference EtabSharp.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+	<!-- ========================================
+         ETABS Installation Detection
+         Checks multiple versions and locations
+         ======================================== -->
+	<PropertyGroup>
+		<!-- Check ETABS 22 (64-bit) - Primary -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22</EtabsInstallDir>
+
+		<!-- Check ETABS 22 (32-bit) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22</EtabsInstallDir>
+
+		<!-- Check ETABS 21 (fallback) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 21\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 21</EtabsInstallDir>
+
+		<!-- Allow user override via MSBuild property or environment variable -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND '$(ETABS_INSTALL_DIR)' != ''">$(ETABS_INSTALL_DIR)</EtabsInstallDir>
+	</PropertyGroup>
+
+	<!-- ========================================
+         Add ETABS Reference (if found)
+         ======================================== -->
+	<ItemGroup Condition="'$(EtabsInstallDir)' != ''">
+		<Reference Include="ETABSv1">
+			<HintPath>$(EtabsInstallDir)\ETABSv1.dll</HintPath>
+			<!-- 
+			CRITICAL FOR COM INTEROP:
+			- Private=true: Copy the DLL to output directory (required for runtime)
+			- EmbedInteropTypes=false: Don't embed types (causes runtime issues with COM)
+			-->
+			<Private>true</Private>
+			<EmbedInteropTypes>false</EmbedInteropTypes>
+		</Reference>
+	</ItemGroup>
+
+	<!-- ========================================
+         Explicit Copy Target (Backup mechanism)
+         Ensures DLL is copied even if Private=true fails
+         ======================================== -->
+	<Target Name="EtabSharp_CopyEtabsDllToOutput"
+	        AfterTargets="Build"
+	        Condition="'$(EtabsInstallDir)' != '' AND '$(TargetFramework)' != ''">
+
+		<PropertyGroup>
+			<EtabsDllSource>$(EtabsInstallDir)\ETABSv1.dll</EtabsDllSource>
+			<EtabsDllDestination>$(OutputPath)ETABSv1.dll</EtabsDllDestination>
+		</PropertyGroup>
+
+		<Message Text="[EtabSharp] ═══════════════════════════════════════" Importance="high" />
+		<Message Text="[EtabSharp] Copying ETABS API DLL to output..." Importance="high" />
+		<Message Text="[EtabSharp]   From: $(EtabsDllSource)" Importance="high" />
+		<Message Text="[EtabSharp]   To:   $(EtabsDllDestination)" Importance="high" />
+
+		<!-- Perform the copy -->
+		<Copy SourceFiles="$(EtabsDllSource)"
+		      DestinationFiles="$(EtabsDllDestination)"
+		      SkipUnchangedFiles="false"
+		      OverwriteReadOnlyFiles="true"
+		      Condition="Exists('$(EtabsDllSource)')" />
+
+		<!-- Verify the copy -->
+		<Message Text="[EtabSharp] ✓ ETABSv1.dll copied successfully!" Importance="high" Condition="Exists('$(EtabsDllDestination)')" />
+		<Warning Text="[EtabSharp] ✗ Copy failed - DLL not found at destination!" Condition="!Exists('$(EtabsDllDestination)')" />
+		<Message Text="[EtabSharp] ═══════════════════════════════════════" Importance="high" />
+	</Target>
+
+	<!-- ========================================
+         Build Diagnostics
+         ======================================== -->
+	<Target Name="EtabSharp_DiagnosticInfo"
+			BeforeTargets="Build"
+			Condition="'$(EtabsInstallDir)' != ''">
+		<Message Text="[EtabSharp] ETABS detected at: $(EtabsInstallDir)" Importance="high" />
+		<Message Text="[EtabSharp] ETABSv1.dll will be automatically referenced" Importance="high" />
+	</Target>
+
+	<Target Name="EtabSharp_WarnIfEtabsMissing"
+			BeforeTargets="Build"
+			Condition="'$(EtabsInstallDir)' == ''">
+		<Warning Text="[EtabSharp] ETABS installation not detected. ETABSv1.dll was not referenced automatically. ETABS functionality will not be available. Install ETABS 21+ or set ETABS_INSTALL_DIR environment variable to specify custom location." />
+	</Target>
+
+</Project>

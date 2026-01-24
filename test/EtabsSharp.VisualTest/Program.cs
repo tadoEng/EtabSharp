@@ -2,7 +2,6 @@
 using EtabSharp.DatabaseTables.Models;
 using ETABSv1;
 
-
 Console.WriteLine("=================================================");
 Console.WriteLine("  EtabSharp Example - Frame Analysis with Rebar");
 Console.WriteLine("=================================================\n");
@@ -159,27 +158,27 @@ try
     }
 
 
-    // START THE DESIGN PART
-    //model.SteelDesign.StartDesign();
-    //var results = model.SteelDesign.GetSummaryResults_3("All", eItemType.Group);
+    //START THE DESIGN PART
+    model.SteelDesign.StartDesign();
+    var results = model.SteelDesign.GetSummaryResults_3("All", eItemType.Group);
 
-    //foreach (var steelDesignSummaryResult in results.Results)
-    //{
-    //    Console.WriteLine($"Frame:{steelDesignSummaryResult.FrameName} with DCR:{steelDesignSummaryResult.ControllingRatio}");
-    //}
-
-    model.ConcreteDesign.StartDesign();
-
-    var results = model.ConcreteDesign.GetSummaryResultsColumn("All", eItemType.Group);
-
-    foreach (var concreteColumnDesignResult in results.Results)
+    foreach (var steelDesignSummaryResult in results.Results)
     {
-        Console.WriteLine($"Frame: {concreteColumnDesignResult.FrameName} with DCR: {concreteColumnDesignResult.PMMRatio}");
+        Console.WriteLine($"Frame:{steelDesignSummaryResult.FrameName} with DCR:{steelDesignSummaryResult.ControllingRatio}");
     }
 
-    var totals = model.ConcreteDesign.GetRebarPrefsColumn(52);
+    //model.ConcreteDesign.StartDesign();
 
-    
+    //var results = model.ConcreteDesign.GetSummaryResultsColumn("All", eItemType.Group);
+
+    //foreach (var concreteColumnDesignResult in results.Results)
+    //{
+    //    Console.WriteLine($"Frame: {concreteColumnDesignResult.FrameName} with DCR: {concreteColumnDesignResult.PMMRatio}");
+    //}
+
+    //var totals = model.ConcreteDesign.GetRebarPrefsColumn(52);
+
+
 }
 catch (Exception e)
 {

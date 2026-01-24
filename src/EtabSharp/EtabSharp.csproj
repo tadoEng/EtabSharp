@@ -8,12 +8,12 @@
 		<!-- Package Identity -->
 		<Title>EtabSharp</Title>
 		<PackageId>EtabSharp</PackageId>
-		<Version>0.1.2-beta</Version>
+		<Version>0.2.0-beta</Version>
 		<Copyright>Copyright © Thanh Tu 2025</Copyright>
 		<Authors>Thanh Tu</Authors>
 
 		<!-- Package Description -->
-		<Description>The easiest way to use the Etabs API in .NET</Description>
+		<Description>The easiest way to use the ETABS API in .NET. Automatically detects and references your ETABS installation - no manual setup required!</Description>
 		<PackageTags>etabs;structural-engineering;civil-engineering;structural-analysis;csi;etabs-api;building-design;structural-design</PackageTags>
 
 		<!-- Repository & Documentation -->
@@ -29,9 +29,16 @@
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>
-			v0.1.2-beta - ETABSv1.dll now included in package
+			v0.2.0-beta - Auto-Detection Release 🚀
 
-			✨ NEW: ETABSv1.dll automatically included - no manual setup required!
+			✨ BREAKING CHANGE: ETABSv1.dll is NO LONGER shipped in package
+
+			🎯 NEW: Automatic ETABS installation detection!
+			- Zero configuration required
+			- Works with ETABS 21 and 22 and beyond
+			- Automatically finds and references your ETABS installation
+			- Supports both 64-bit and 32-bit installations
+			- Much smaller package size (~99% reduction)
 
 			Features:
 			- Material property management (Concrete, Rebar, Steel)
@@ -44,9 +51,14 @@
 			- Full IntelliSense support
 
 			Requirements:
-			- ETABS v22+ must be installed (for COM API functionality)
+			- ETABS v21+ must be installed on your system
 			- .NET 10.0 or later
 			- Windows OS
+
+			Migration from v0.1.x:
+			- Simply update the package - no code changes needed
+			- ETABS will be auto-detected from standard installation paths
+			- If custom path needed, set ETABS_INSTALL_DIR environment variable
 		</PackageReleaseNotes>
 
 		<!-- CI/CD Settings -->
@@ -55,33 +67,60 @@
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 	</PropertyGroup>
 
+	<!-- =========================
+       Package Dependencies
+       ========================= -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Reference Include="ETABSv1">
-	    <HintPath>..\..\lib\ETABSv1.dll</HintPath>
-		  <Private>True</Private>
-	  </Reference>
+	<!-- =========================
+       Development-only ETABS Reference
+       (Only used when building the library itself)
+       ========================= -->
+	<PropertyGroup>
+		<!-- Detect ETABS installation for development -->
+		<EtabsDevPath Condition="Exists('$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll')">$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll</EtabsDevPath>
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(EtabsDevPath)' != ''">
+		<Reference Include="ETABSv1">
+			<HintPath>$(EtabsDevPath)</HintPath>
+			<!-- 
+			Private=false because:
+			1. This is a CLASS LIBRARY - it doesn't need ETABSv1.dll in its output
+			2. The library doesn't ship with ETABSv1.dll
+			3. Consuming applications get ETABSv1.dll via the .targets file
+			-->
+			<Private>false</Private>
+			<EmbedInteropTypes>false</EmbedInteropTypes>
+		</Reference>
 	</ItemGroup>
 
-	<ItemGroup>
-		<!-- Package the DLL in lib folder so it's copied to consuming projects -->
-		<None Include="..\..\lib\ETABSv1.dll" Pack="true" PackagePath="lib\net10.0\" />
+	<!-- Show ETABS path during development build -->
+	<Target Name="ShowEtabsDevPath" BeforeTargets="CoreCompile">
+		<Message Text="[EtabSharp.csproj] ETABS dev reference: $(EtabsDevPath)" Importance="high" Condition="'$(EtabsDevPath)' != ''" />
+		<Warning Text="[EtabSharp.csproj] ETABS not found - build may fail. Install ETABS or place ETABSv1.dll in lib\ folder." Condition="'$(EtabsDevPath)' == ''" />
+	</Target>
 
-		<!-- Also include in runtimes for native reference -->
-		<None Include="..\..\lib\ETABSv1.dll" Pack="true" PackagePath="runtimes\win-x64\native\" />
-		<None Include="..\..\lib\ETABSv1.dll" Pack="true" PackagePath="runtimes\win-arm64\native\" />
+	<!-- =========================
+       Package Content
+       ========================= -->
+	<ItemGroup>
+		<!-- Include the .targets file for auto-detection -->
+		<None Include="build\EtabSharp.targets" Pack="true" PackagePath="build\EtabSharp.targets" />
+		<None Include="build\EtabSharp.targets" Pack="true" PackagePath="buildTransitive\EtabSharp.targets" />
 
 		<!-- Include README -->
 		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
 
-		<!-- Include .targets file to auto-reference ETABSv1.dll in consuming projects -->
 	</ItemGroup>
 
-	
+
+
 
 </Project>
