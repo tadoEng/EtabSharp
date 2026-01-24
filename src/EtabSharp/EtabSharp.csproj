@@ -25,7 +25,7 @@
 
 		<!-- Build setting-->
 		<SignAssembly>True</SignAssembly>
-		<NoWarn>$(NoWarn);IDE0065;IDE0055;IDE0011;S3881</NoWarn>
+		<NoWarn>$(NoWarn);IDE0065;IDE0055;IDE0011;S3881;CS1591;CS1570</NoWarn>
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>

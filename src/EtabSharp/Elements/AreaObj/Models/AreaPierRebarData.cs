@@ -20,6 +20,7 @@ public class AreaPierRebarData
     /// </summary>
     public List<AreaRebarLayer> Layers { get; set; } = new();
 
+    /// <inheritdoc />
     public override string ToString()
     {
         return $"Pier {Name}: {NumberOfLayers} rebar layers";

@@ -10,7 +10,7 @@ public class Point
     /// <summary>
     /// Unique name of the point object in ETABS
     /// </summary>
-    public required string Name { get; set; }
+    public required string? Name { get; set; }
 
     /// <summary>
     /// X coordinate in current length units

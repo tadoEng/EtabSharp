@@ -76,7 +76,7 @@ public class ConcreteColumnDesignResult
     public string WarningSummary { get; set; } = string.Empty;
 
     /// <summary>
-    /// Indicates if design passed (no errors and ratio <= 1.0).
+    /// Indicates if design passed (no errors and ratio smaller 1.0).
     /// </summary>
     public bool Passes => string.IsNullOrWhiteSpace(ErrorSummary) && PMMRatio <= 1.0;
 

@@ -1,6 +1,7 @@
 ﻿using EtabSharp.Core;
 using EtabSharp.DatabaseTables.Models;
 using ETABSv1;
+using Microsoft.Extensions.Logging;
 
 Console.WriteLine("=================================================");
 Console.WriteLine("  EtabSharp Example - Frame Analysis with Rebar");

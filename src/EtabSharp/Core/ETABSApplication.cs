@@ -116,9 +116,7 @@ public class ETABSApplication : IDisposable
         catch (Exception ex)
         {
             var funcName = functionName ?? "API function";
-            _logger.LogError(ex, "Error calling {FunctionName}", funcName);
-            Console.WriteLine($"Error calling {funcName}: {ex.Message}");
-            Console.WriteLine("This function may not be supported in your version of ETABS.");
+            _logger.LogError(ex, "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.", funcName, ex.Message);
             throw;
         }
     }
@@ -138,9 +136,7 @@ public class ETABSApplication : IDisposable
         catch (Exception ex)
         {
             var funcName = functionName ?? "API function";
-            _logger.LogError(ex, "Error calling {FunctionName}", funcName);
-            Console.WriteLine($"Error calling {funcName}: {ex.Message}");
-            Console.WriteLine("This function may not be supported in your version of ETABS.");
+            _logger.LogError(ex, "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.", funcName, ex.Message);
             throw;
         }
     }
@@ -169,8 +165,7 @@ public class ETABSApplication : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error closing ETABS");
-                Console.WriteLine($"Error closing ETABS: {ex.Message}");
+                _logger.LogWarning(ex, "Error closing ETABS: {Message}", ex.Message);
             }
         }
     }
