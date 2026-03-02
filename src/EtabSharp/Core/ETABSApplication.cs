@@ -1,4 +1,6 @@
 ﻿using EtabSharp.Core.Models;
+using EtabSharp.Interfaces.System;
+using EtabSharp.System;
 using ETABSv1;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -6,10 +8,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace EtabSharp.Core;
 
 /// <summary>
-/// ETABS application wrapper for v22 and newer
-/// Provides strongly-typed access to ETABS API using ETABSv1.DLL (.NET Standard 2.0)
+/// ETABS application wrapper for v22 and newer.
+/// Entry point returned by ETABSWrapper.Connect() and ETABSWrapper.CreateNew().
+///
+/// Two access paths:
+///   app.Application  — lifecycle, visibility, ROT (wraps cOAPI via IApplication)
+///   app.Model        — all model operations (geometry, loads, analysis, results)
 /// </summary>
-public class ETABSApplication : IDisposable
+public sealed class ETABSApplication : IDisposable
 {
     private readonly cOAPI _api;
     private readonly cSapModel _sapModel;
@@ -20,52 +26,58 @@ public class ETABSApplication : IDisposable
 
     private readonly ILogger<ETABSApplication> _logger;
 
-    // NEW: Add the model wrapper
+    private readonly Lazy<IApplication> _application;
     private readonly Lazy<ETABSModel> _model;
 
     /// <summary>
-    /// Gets the ETABS model instance, providing access to the building analysis and design data.
+    /// Application-level control: lifecycle (start/exit), visibility (hide/unhide),
+    /// version info, and ROT registration.
+    /// Wraps cOAPI.
+    /// </summary>
+    public IApplication Application => _application.Value;
+
+    /// <summary>
+    /// Model operations: geometry, properties, loads, analysis, results, design.
+    /// Wraps cSapModel.
     /// </summary>
     public ETABSModel Model => _model.Value;
 
     /// <summary>
-    /// Gets the ETABS major version (e.g., 22 for v22.7.0)
+    /// ETABS major version number (e.g., 22 for v22.7.0).
     /// </summary>
     public int MajorVersion => _majorVersion;
 
     /// <summary>
-    /// Gets the full ETABS version (e.g., "22.7.0")
+    /// Full ETABS version string (e.g., "22.7.0").
     /// </summary>
     public string FullVersion => _fullVersion;
 
     /// <summary>
-    /// Gets the API version number
+    /// OAPI version number reported by the running ETABS instance.
     /// </summary>
     public double ApiVersion => _apiVersion;
 
     /// <summary>
-    /// Gets the DLL name being used
+    /// Always "ETABSv1.DLL" for v22+.
     /// </summary>
     public string DllName => "ETABSv1.DLL";
 
     /// <summary>
-    /// Always true for v22+ (.NET Standard 2.0)
+    /// Always true for v22+ (.NET Standard 2.0 API).
     /// </summary>
     public bool IsNetStandard => true;
 
     /// <summary>
-    /// Gets strongly-typed cOAPI object for ETABS v22+
-    /// Use this for application-level operations (file, program control, etc.)
+    /// Direct access to the underlying cSapModel for advanced usage.
+    /// Prefer Model.* properties over this wherever possible.
     /// </summary>
-    public ETABSv1.cOAPI API => _api;
+    public cSapModel SapModel => _sapModel;
 
-    /// <summary>
-    /// Gets strongly-typed cSapModel object for ETABS v22+
-    /// Use this for model operations (geometry, loads, analysis, results, etc.)
-    /// </summary>
-    public ETABSv1.cSapModel SapModel => _sapModel;
-
-    internal ETABSApplication(ETABSv1.cOAPI api, int majorVersion, double apiVersion, string fullVersion,
+    internal ETABSApplication(
+        cOAPI api,
+        int majorVersion,
+        double apiVersion,
+        string fullVersion,
         ILogger<ETABSApplication>? logger = null)
     {
         _api = api ?? throw new ArgumentNullException(nameof(api));
@@ -75,8 +87,11 @@ public class ETABSApplication : IDisposable
         _fullVersion = fullVersion;
         _logger = logger ?? NullLogger<ETABSApplication>.Instance;
 
-        // Initialize the model wrapper with lazy loading
-        _model = new Lazy<ETABSModel>(() => new ETABSModel(_sapModel, _logger));
+        _application = new Lazy<IApplication>(
+            () => new ETABSApplicationManager(_api, _logger));
+
+        _model = new Lazy<ETABSModel>(
+            () => new ETABSModel(_sapModel, _logger));
 
         _logger.LogInformation(
             "Connected to ETABS v{Version}, API v{ApiVersion}",
@@ -85,29 +100,22 @@ public class ETABSApplication : IDisposable
     }
 
     /// <summary>
-    /// Gets API information
+    /// Returns a summary of API connection info.
     /// </summary>
-    public ETABSApiInfo GetApiInfo()
+    public ETABSApiInfo GetApiInfo() => new ETABSApiInfo
     {
-        return new ETABSApiInfo
-        {
-            MajorVersion = MajorVersion,
-            FullVersion = FullVersion,
-            ApiVersion = ApiVersion,
-            DllName = DllName,
-            IsNetStandard = IsNetStandard
-        };
-    }
+        MajorVersion = MajorVersion,
+        FullVersion = FullVersion,
+        ApiVersion = ApiVersion,
+        DllName = DllName,
+        IsNetStandard = IsNetStandard
+    };
 
     /// <summary>
-    /// Safely executes an API function with error handling
-    /// ETABS v22+ throws catchable exceptions for unsupported functions
+    /// Safely executes an API call with error handling and logging.
+    /// ETABS v22+ throws catchable exceptions for unsupported functions.
     /// </summary>
-    /// <typeparam name="T">Return type</typeparam>
-    /// <param name="apiCall">The API function to execute</param>
-    /// <param name="functionName">Optional name for better error messages</param>
-    /// <returns>Result of the API call</returns>
-    public T ExecuteSafely<T>(Func<T> apiCall, string functionName = null)
+    public T ExecuteSafely<T>(Func<T> apiCall, string? functionName = null)
     {
         try
         {
@@ -115,19 +123,17 @@ public class ETABSApplication : IDisposable
         }
         catch (Exception ex)
         {
-            var funcName = functionName ?? "API function";
-            _logger.LogError(ex, "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.", funcName, ex.Message);
+            _logger.LogError(ex,
+                "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.",
+                functionName ?? "API function", ex.Message);
             throw;
         }
     }
 
     /// <summary>
-    /// Safely executes an API action with error handling (void return)
-    /// ETABS v22+ throws catchable exceptions for unsupported functions
+    /// Safely executes a void API call with error handling and logging.
     /// </summary>
-    /// <param name="apiCall">The API action to execute</param>
-    /// <param name="functionName">Optional name for better error messages</param>
-    public void ExecuteSafely(Action apiCall, string functionName = null)
+    public void ExecuteSafely(Action apiCall, string? functionName = null)
     {
         try
         {
@@ -135,43 +141,41 @@ public class ETABSApplication : IDisposable
         }
         catch (Exception ex)
         {
-            var funcName = functionName ?? "API function";
-            _logger.LogError(ex, "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.", funcName, ex.Message);
+            _logger.LogError(ex,
+                "Error calling {FunctionName}: {Message}. This function may not be supported in your version of ETABS.",
+                functionName ?? "API function", ex.Message);
             throw;
         }
     }
 
     /// <summary>
-    /// Gets the underlying cOAPI object (for advanced usage)
+    /// Exits the ETABS application.
+    /// Prefer using Application.ApplicationExit() for explicit control.
+    /// This method exists for IDisposable and convenience.
     /// </summary>
-    public cOAPI GetRawAPI() => _api;
-
-    /// <summary>
-    /// Gets the underlying cSapModel object (for advanced usage)
-    /// </summary>
-    public cSapModel GetRawModel() => _sapModel;
-
-    /// <summary>
-    /// Closes the ETABS application
-    /// </summary>
+    /// <param name="savePrompt">
+    /// If true, ETABS prompts to save unsaved changes.
+    /// If false (default), exits immediately — correct for Mode B hidden instances.
+    /// </param>
     public void Close(bool savePrompt = false)
     {
-        if (!_disposed)
+        if (_disposed) return;
+
+        try
         {
-            try
-            {
-                _api.ApplicationExit(savePrompt);
-                _logger.LogInformation("ETABS application closed");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error closing ETABS: {Message}", ex.Message);
-            }
+            _application.Value.ApplicationExit(savePrompt);
+            _logger.LogInformation("ETABS application closed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error during Close: {Message}", ex.Message);
         }
     }
 
     /// <summary>
-    /// Implements IDisposable to close ETABS when disposed
+    /// Disposes this wrapper. Calls ApplicationExit(false) — does NOT save.
+    /// For Mode A (attach) flows, do NOT dispose — release COM manually via ComCleanup.
+    /// For Mode B (hidden) flows, disposing is correct and will exit the hidden instance.
     /// </summary>
     public void Dispose()
     {
@@ -183,4 +187,20 @@ public class ETABSApplication : IDisposable
 
         GC.SuppressFinalize(this);
     }
+
+    #region Advanced / Raw Access
+
+    /// <summary>
+    /// Gets the raw cOAPI object.
+    /// Use only when IApplication does not cover what you need.
+    /// </summary>
+    internal cOAPI GetRawAPI() => _api;
+
+    /// <summary>
+    /// Gets the raw cSapModel object.
+    /// Use only when Model.* does not cover what you need.
+    /// </summary>
+    internal cSapModel GetRawModel() => _sapModel;
+
+    #endregion
 }

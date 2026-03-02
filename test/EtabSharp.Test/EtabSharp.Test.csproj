@@ -32,7 +32,6 @@
 
     <PackageReference Include="Shouldly" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
-    <PackageReference Include="Moq" />
   </ItemGroup>
 
   

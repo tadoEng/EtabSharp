@@ -6,216 +6,315 @@ using System.Diagnostics;
 namespace EtabSharp.Core;
 
 /// <summary>
-/// Wrapper for connecting to and interacting with ETABS v22 and newer
-/// Uses ETABSv1.DLL with .NET Standard 2.0 API
+/// Factory for creating and connecting to ETABS v22+ instances.
+/// Returns ETABSApplication — the single entry point for all ETABS interaction.
+///
+/// Two usage patterns:
+///   ETABSWrapper.Connect()    — Mode A: attach to user's running ETABS
+///   ETABSWrapper.CreateNew()  — Mode B: start a new hidden instance
 /// </summary>
-public class ETABSWrapper
+public static class ETABSWrapper
 {
     private const string ETABS_PROCESS_NAME = "ETABS";
     private const string ETABS_PROGID = "CSI.ETABS.API.ETABSObject";
     private const int MINIMUM_SUPPORTED_VERSION = 22;
 
+    #region Public Factory Methods
+
     /// <summary>
-    /// Connects to running ETABS instance (v22+)
+    /// Mode A: Connects to the currently running ETABS instance (v22+).
+    /// Does NOT call ApplicationStart or Hide — attaches to whatever ETABS the user has open.
+    /// Returns null if no running instance is found or if version is unsupported.
     /// </summary>
-    /// <param name="logger">Optional logger for diagnostics</param>
-    /// <returns>ETABS application wrapper with typed access to API, or null if none found</returns>
-    public static ETABSApplication Connect(ILogger<ETABSApplication>? logger = null)
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public static ETABSApplication? Connect(ILogger<ETABSApplication>? logger = null)
     {
-        var wrapperLogger = logger ?? NullLogger<ETABSApplication>.Instance;
-        var etabsProcesses = GetETABSProcesses();
+        var log = logger ?? NullLogger<ETABSApplication>.Instance;
+        var processes = GetETABSProcesses();
 
-        if (!etabsProcesses.Any())
+        if (!processes.Any())
         {
-            wrapperLogger.LogWarning("No running ETABS instances found");
+            log.LogWarning("No running ETABS instances found");
             return null;
         }
 
-        var activeProcess = FindActiveProcess(etabsProcesses, wrapperLogger);
-
-        if (activeProcess == null)
+        var active = FindActiveProcess(processes, log);
+        if (active == null)
         {
-            wrapperLogger.LogWarning("No ETABS instance with active window found");
+            log.LogWarning("No ETABS instance with active main window found");
             return null;
         }
 
-        return ConnectToETABS(activeProcess, logger);
+        return ConnectToETABS(active, logger);
     }
 
     /// <summary>
-    /// Creates a new ETABS instance
+    /// Mode B: Creates a new ETABS instance and optionally hides it.
+    /// Used for background / pipeline operations (generate-e2k, run-analysis, extract-results).
+    ///
+    /// Always call app.Application.Hide() immediately after if running in background.
+    /// Always call app.Application.ApplicationExit(false) in your finally block when done.
     /// </summary>
-    /// <param name="programPath">Optional path to ETABS.exe. If null, uses latest installed version</param>
-    /// <param name="startApplication">Whether to start the application UI</param>
-    /// <param name="logger">Optional logger for diagnostics</param>
-    /// <returns>ETABS application wrapper</returns>
-    public static ETABSApplication CreateNew(string programPath = null, bool startApplication = true,
+    /// <param name="programPath">
+    /// Optional path to ETABS.exe. If null, uses the latest installed version via ProgID.
+    /// Can also be overridden without code changes via environment variable:
+    ///   CSI_ETABS_API_ETABSObject_PATH=C:\path\to\ETABS.exe
+    /// </param>
+    /// <param name="startApplication">
+    /// Whether to call ApplicationStart(). Default true.
+    /// Set false only if you intend to call it manually after creation.
+    /// </param>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public static ETABSApplication? CreateNew(
+        string? programPath = null,
+        bool startApplication = true,
         ILogger<ETABSApplication>? logger = null)
     {
-        var wrapperLogger = logger ?? NullLogger<ETABSApplication>.Instance;
+        var log = logger ?? NullLogger<ETABSApplication>.Instance;
 
         try
         {
-            // Create API helper object
             ETABSv1.cHelper helper = new ETABSv1.Helper();
             ETABSv1.cOAPI api;
 
             if (!string.IsNullOrEmpty(programPath))
             {
-                // Create instance from specified path
-                wrapperLogger.LogDebug("Creating ETABS instance from path: {Path}", programPath);
+                log.LogDebug("Creating ETABS instance from path: {Path}", programPath);
                 api = helper.CreateObject(programPath);
             }
             else
             {
-                // Create instance from latest installed ETABS
-                wrapperLogger.LogDebug("Creating ETABS instance using ProgID: {ProgID}", ETABS_PROGID);
+                log.LogDebug("Creating ETABS instance via ProgID: {ProgID}", ETABS_PROGID);
                 api = helper.CreateObjectProgID(ETABS_PROGID);
             }
 
             if (startApplication)
             {
-                // Start ETABS application UI
                 int ret = api.ApplicationStart();
                 if (ret != 0)
-                {
-                    wrapperLogger.LogWarning("ApplicationStart returned non-zero value: {ReturnValue}", ret);
-                }
+                    log.LogWarning("ApplicationStart returned non-zero: {ReturnValue}", ret);
             }
 
-            // Get version info
-            var versionInfo = GetVersionFromAPI(api, wrapperLogger);
-            int version = versionInfo.majorVersion;
-            string fullVersion = versionInfo.fullVersion;
-            double apiVersion = GetApiVersionNumber(helper, wrapperLogger);
+            var versionInfo = GetVersionFromProcess(log);
+            double apiVersion = GetApiVersion(helper, log);
 
-            wrapperLogger.LogInformation("Created new ETABS instance v{Version}, API Version: {ApiVersion}", fullVersion, apiVersion);
+            log.LogInformation(
+                "Created new ETABS instance v{Version}, API v{ApiVersion}",
+                versionInfo.fullVersion, apiVersion);
 
-            return new ETABSApplication(api, version, apiVersion, fullVersion, logger);
+            return new ETABSApplication(api, versionInfo.majorVersion, apiVersion, versionInfo.fullVersion, logger);
         }
         catch (Exception ex)
         {
-            wrapperLogger.LogError(ex, "Error creating new ETABS instance");
+            log.LogError(ex, "Failed to create new ETABS instance");
             return null;
         }
     }
 
     /// <summary>
-    /// Gets all running ETABS processes
+    /// Mode A: Connects to a specific running ETABS instance by PID.
+    /// Use GetAllRunningInstances() first to discover available instances and their PIDs.
+    /// Returns null if the process is not found, not supported, or attach fails.
     /// </summary>
-    private static List<Process> GetETABSProcesses()
+    /// <param name="pid">Process ID of the ETABS instance to attach to.</param>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public static ETABSApplication? ConnectToProcess(int pid, ILogger<ETABSApplication>? logger = null)
     {
-        return Process.GetProcessesByName(ETABS_PROCESS_NAME).ToList();
+        var log = logger ?? NullLogger<ETABSApplication>.Instance;
+
+        var process = GetETABSProcesses().FirstOrDefault(p => p.Id == pid);
+        if (process == null)
+        {
+            log.LogWarning("No ETABS process found with PID {Pid}", pid);
+            return null;
+        }
+
+        try
+        {
+            var fvi = process.MainModule!.FileVersionInfo;
+            var processInfo = new ETABSProcessInfo
+            {
+                Process = process,
+                MajorVersion = fvi.FileMajorPart,
+                MinorVersion = fvi.FileMinorPart,
+                BuildVersion = fvi.FileBuildPart,
+                FullVersion = $"{fvi.FileMajorPart}.{fvi.FileMinorPart}.{fvi.FileBuildPart}",
+                ProcessName = process.ProcessName
+            };
+
+            return ConnectToETABS(processInfo, logger);
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "Failed to read process info for PID {Pid}", pid);
+            return null;
+        }
+    }
+
+
+
+    /// <summary>
+    /// Returns true if any ETABS process is currently running.
+    /// </summary>
+    public static bool IsRunning() => GetETABSProcesses().Any();
+
+    /// <summary>
+    /// Returns true if a supported ETABS version (v22+) is running with a main window.
+    /// </summary>
+    public static bool IsSupportedVersionRunning(ILogger? logger = null)
+    {
+        var active = FindActiveProcess(GetETABSProcesses(), logger ?? NullLogger.Instance);
+        return active != null && active.MajorVersion >= MINIMUM_SUPPORTED_VERSION;
     }
 
     /// <summary>
-    /// Finds the first ETABS process with an active main window
+    /// Returns the full version string of the active ETABS instance, or null if none found.
     /// </summary>
-    private static ETABSProcessInfo FindActiveProcess(List<Process> processes, ILogger logger)
+    public static string? GetActiveVersion(ILogger? logger = null)
+    {
+        var active = FindActiveProcess(GetETABSProcesses(), logger ?? NullLogger.Instance);
+        return active?.FullVersion;
+    }
+
+    /// <summary>
+    /// Returns info about all currently running ETABS instances.
+    /// </summary>
+    public static List<ETABSInstanceInfo> GetAllRunningInstances(ILogger? logger = null)
+    {
+        var log = logger ?? NullLogger.Instance;
+        var result = new List<ETABSInstanceInfo>();
+
+        foreach (var process in GetETABSProcesses())
+        {
+            try
+            {
+                var fvi = process.MainModule!.FileVersionInfo;
+                result.Add(new ETABSInstanceInfo
+                {
+                    ProcessId = process.Id,
+                    ProcessName = process.ProcessName,
+                    MajorVersion = fvi.FileMajorPart,
+                    FullVersion = $"{fvi.FileMajorPart}.{fvi.FileMinorPart}.{fvi.FileBuildPart}",
+                    HasMainWindow = process.MainWindowHandle != IntPtr.Zero,
+                    WindowTitle = process.MainWindowTitle,
+                    IsSupported = fvi.FileMajorPart >= MINIMUM_SUPPORTED_VERSION
+                });
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning(ex, "Error reading process info for PID {ProcessId}", process.Id);
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region Private Helpers
+
+    private static List<Process> GetETABSProcesses() =>
+        Process.GetProcessesByName(ETABS_PROCESS_NAME).ToList();
+
+    private static ETABSProcessInfo? FindActiveProcess(List<Process> processes, ILogger logger)
     {
         foreach (var process in processes)
         {
-            if (process.MainWindowHandle != IntPtr.Zero)
-            {
-                try
-                {
-                    var fileVersionInfo = process.MainModule.FileVersionInfo;
+            if (process.MainWindowHandle == IntPtr.Zero) continue;
 
-                    return new ETABSProcessInfo
-                    {
-                        Process = process,
-                        MajorVersion = fileVersionInfo.FileMajorPart,
-                        MinorVersion = fileVersionInfo.FileMinorPart,
-                        BuildVersion = fileVersionInfo.FileBuildPart,
-                        FullVersion =
-                            $"{fileVersionInfo.FileMajorPart}.{fileVersionInfo.FileMinorPart}.{fileVersionInfo.FileBuildPart}",
-                        ProcessName = process.ProcessName
-                    };
-                }
-                catch (Exception ex)
+            try
+            {
+                var fvi = process.MainModule!.FileVersionInfo;
+                return new ETABSProcessInfo
                 {
-                    logger.LogWarning(ex, "Error reading process info for PID {ProcessId}", process.Id);
-                    continue;
-                }
+                    Process = process,
+                    MajorVersion = fvi.FileMajorPart,
+                    MinorVersion = fvi.FileMinorPart,
+                    BuildVersion = fvi.FileBuildPart,
+                    FullVersion = $"{fvi.FileMajorPart}.{fvi.FileMinorPart}.{fvi.FileBuildPart}",
+                    ProcessName = process.ProcessName
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error reading process info for PID {ProcessId}", process.Id);
             }
         }
 
         return null;
     }
 
-    /// <summary>
-    /// Connects to the ETABS process and returns wrapper
-    /// </summary>
-    private static ETABSApplication ConnectToETABS(ETABSProcessInfo processInfo, ILogger<ETABSApplication>? logger)
+    private static ETABSApplication? ConnectToETABS(ETABSProcessInfo processInfo, ILogger<ETABSApplication>? logger)
     {
-        var wrapperLogger = logger ?? NullLogger<ETABSApplication>.Instance;
+        var log = logger ?? NullLogger<ETABSApplication>.Instance;
 
         if (processInfo.MajorVersion == 0)
         {
-            wrapperLogger.LogWarning("Unable to determine ETABS version");
+            log.LogWarning("Unable to determine ETABS version");
             return null;
         }
 
         if (processInfo.MajorVersion < MINIMUM_SUPPORTED_VERSION)
         {
-            wrapperLogger.LogWarning(
-                "ETABS v{Version} is not supported. This wrapper requires ETABS v{MinVersion} or newer. Please upgrade your ETABS installation.",
-                processInfo.FullVersion,
-                MINIMUM_SUPPORTED_VERSION);
+            log.LogWarning(
+                "ETABS v{Version} is not supported. Minimum required: v{MinVersion}.",
+                processInfo.FullVersion, MINIMUM_SUPPORTED_VERSION);
             return null;
         }
 
         try
         {
-            wrapperLogger.LogInformation("Connecting to ETABS v{Version}...", processInfo.FullVersion);
-            return CreateETABSApplication(processInfo.MajorVersion, processInfo.FullVersion, logger);
-        }
-        catch (Exception ex)
-        {
-            wrapperLogger.LogError(ex, "Error connecting to ETABS v{Version}", processInfo.FullVersion);
-            return null;
-        }
-    }
+            log.LogInformation("Connecting to ETABS v{Version} (PID: {Pid})...",
+                processInfo.FullVersion, processInfo.Process?.Id);
 
-    /// <summary>
-    /// Creates ETABS application wrapper for v22+ by attaching to running instance
-    /// </summary>
-    private static ETABSApplication CreateETABSApplication(int majorVersion, string fullVersion,
-        ILogger<ETABSApplication>? logger)
-    {
-        var wrapperLogger = logger ?? NullLogger<ETABSApplication>.Instance;
-
-        try
-        {
-            // Create helper object
             ETABSv1.cHelper helper = new ETABSv1.Helper();
+            ETABSv1.cOAPI api = AttachToProcess(helper, processInfo, log);
+            double apiVersion = GetApiVersion(helper, log);
 
-            // Get the active ETABS object
-            ETABSv1.cOAPI api = helper.GetObject(ETABS_PROGID);
-
-            // Get the API version number
-            double apiVersion = GetApiVersionNumber(helper, wrapperLogger);
-
-            wrapperLogger.LogInformation("Connected to ETABS v{Version}, API Version: {ApiVersion}", fullVersion, apiVersion);
-
-            return new ETABSApplication(api, majorVersion, apiVersion, fullVersion, logger);
+            return new ETABSApplication(
+                api,
+                processInfo.MajorVersion,
+                apiVersion,
+                processInfo.FullVersion,
+                logger);
         }
         catch (Exception ex)
         {
-            wrapperLogger.LogError(ex, "Failed to attach to ETABS");
+            log.LogError(ex, "Failed to attach to ETABS v{Version}", processInfo.FullVersion);
             throw;
         }
     }
 
     /// <summary>
-    /// Gets the API version number from helper
+    /// Attaches to a specific ETABS process by PID using GetObjectProcess().
+    /// Falls back to GetObject() (ROT-based) if PID attach fails or PID is unavailable.
     /// </summary>
-    private static double GetApiVersionNumber(ETABSv1.cHelper helper, ILogger logger)
+    private static ETABSv1.cOAPI AttachToProcess(
+        ETABSv1.cHelper helper,
+        ETABSProcessInfo processInfo,
+        ILogger logger)
     {
-        try
+        if (processInfo.Process?.Id is int pid)
         {
-            return helper.GetOAPIVersionNumber();
+            try
+            {
+                logger.LogDebug("Attaching to ETABS via PID {Pid}", pid);
+                return helper.GetObjectProcess(ETABS_PROGID, pid);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "GetObjectProcess({Pid}) failed, falling back to GetObject()", pid);
+            }
         }
+
+        logger.LogDebug("Attaching to ETABS via ROT (GetObject)");
+        return helper.GetObject(ETABS_PROGID);
+    }
+
+    private static double GetApiVersion(ETABSv1.cHelper helper, ILogger logger)
+    {
+        try { return helper.GetOAPIVersionNumber(); }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Unable to get API version number");
@@ -224,102 +323,33 @@ public class ETABSWrapper
     }
 
     /// <summary>
-    /// Gets version from API object by examining process
+    /// Reads version from currently running ETABS process (used after CreateNew).
+    /// Falls back to 22.0.0 if process can't be read.
     /// </summary>
-    private static (int majorVersion, string fullVersion) GetVersionFromAPI(ETABSv1.cOAPI api, ILogger logger)
+    private static (int majorVersion, string fullVersion) GetVersionFromProcess(ILogger logger)
     {
         try
         {
-            var processes = GetETABSProcesses();
-            var activeProcess = FindActiveProcess(processes, logger);
-            if (activeProcess != null)
-            {
-                return (activeProcess.MajorVersion, activeProcess.FullVersion);
-            }
-
-            logger.LogWarning("Unable to determine ETABS version from process, defaulting to v22.0.0");
-            return (22, "22.0.0"); // Default to 22.0.0 if can't determine
+            var active = FindActiveProcess(GetETABSProcesses(), logger);
+            if (active != null)
+                return (active.MajorVersion, active.FullVersion);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Error getting version from API, defaulting to v22.0.0");
-            return (22, "22.0.0"); // Default to 22.0.0
-        }
-    }
-
-    /// <summary>
-    /// Gets list of all running ETABS instances with their version info
-    /// </summary>
-    public static List<ETABSInstanceInfo> GetAllRunningInstances(ILogger? logger = null)
-    {
-        var wrapperLogger = logger ?? NullLogger.Instance;
-        var instances = new List<ETABSInstanceInfo>();
-        var processes = GetETABSProcesses();
-
-        foreach (var process in processes)
-        {
-            try
-            {
-                var fileVersionInfo = process.MainModule.FileVersionInfo;
-                int majorVersion = fileVersionInfo.FileMajorPart;
-                string fullVersion =
-                    $"{fileVersionInfo.FileMajorPart}.{fileVersionInfo.FileMinorPart}.{fileVersionInfo.FileBuildPart}";
-
-                instances.Add(new ETABSInstanceInfo
-                {
-                    ProcessId = process.Id,
-                    ProcessName = process.ProcessName,
-                    MajorVersion = majorVersion,
-                    FullVersion = fullVersion,
-                    HasMainWindow = process.MainWindowHandle != IntPtr.Zero,
-                    WindowTitle = process.MainWindowTitle,
-                    IsSupported = majorVersion >= MINIMUM_SUPPORTED_VERSION
-                });
-            }
-            catch (Exception ex)
-            {
-                wrapperLogger.LogWarning(ex, "Error reading process {ProcessId}", process.Id);
-            }
+            logger.LogWarning(ex, "Error reading version from process");
         }
 
-        return instances;
+        logger.LogWarning("Could not determine ETABS version, defaulting to v22.0.0");
+        return (22, "22.0.0");
     }
 
-    /// <summary>
-    /// Checks if ETABS is currently running
-    /// </summary>
-    public static bool IsRunning()
-    {
-        return GetETABSProcesses().Any();
-    }
-
-    /// <summary>
-    /// Checks if a supported version of ETABS (v22+) is running
-    /// </summary>
-    public static bool IsSupportedVersionRunning(ILogger? logger = null)
-    {
-        var wrapperLogger = logger ?? NullLogger.Instance;
-        var processes = GetETABSProcesses();
-        var activeProcess = FindActiveProcess(processes, wrapperLogger);
-        return activeProcess != null && activeProcess.MajorVersion >= MINIMUM_SUPPORTED_VERSION;
-    }
-
-    /// <summary>
-    /// Gets the version of the active ETABS instance
-    /// </summary>
-    public static string GetActiveVersion(ILogger? logger = null)
-    {
-        var wrapperLogger = logger ?? NullLogger.Instance;
-        var processes = GetETABSProcesses();
-        var activeProcess = FindActiveProcess(processes, wrapperLogger);
-        return activeProcess?.FullVersion;
-    }
+    #endregion
 }
 
 /// <summary>
-/// Internal class to store ETABS process information
+/// Internal process snapshot used during connection setup.
 /// </summary>
-internal class ETABSProcessInfo
+internal sealed class ETABSProcessInfo
 {
     public Process? Process { get; set; }
     public int MajorVersion { get; set; }
