@@ -4,6 +4,8 @@ using EtabSharp.System;
 using ETABSv1;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.InteropServices;
+
 
 namespace EtabSharp.Core;
 
@@ -157,6 +159,7 @@ public sealed class ETABSApplication : IDisposable
     /// If true, ETABS prompts to save unsaved changes.
     /// If false (default), exits immediately — correct for Mode B hidden instances.
     /// </param>
+    // Close() remains explicit — user calls this when they want ETABS to exit
     public void Close(bool savePrompt = false)
     {
         if (_disposed) return;
@@ -164,11 +167,11 @@ public sealed class ETABSApplication : IDisposable
         try
         {
             _application.Value.ApplicationExit(savePrompt);
-            _logger.LogInformation("ETABS application closed");
+            _logger.LogInformation("ETABS application exited");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error during Close: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Error during ApplicationExit: {Message}", ex.Message);
         }
     }
 
@@ -179,10 +182,36 @@ public sealed class ETABSApplication : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
+        if (_disposed) return;
+        _disposed = true;
+
+        // Only attempt COM cleanup on Windows platforms where Marshal.ReleaseComObject is supported.
+        // This prevents CA1416 diagnostics and avoids calling Windows-only runtime APIs on other platforms.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Close(false);
-            _disposed = true;
+            try
+            {
+                // Release child managers first (reverse init order)
+                if (_model.IsValueCreated)
+                    Marshal.ReleaseComObject(_model.Value);
+
+                if (_application.IsValueCreated)
+                    Marshal.ReleaseComObject(_application.Value);
+
+                // Release raw COM refs last (parents after children)
+                Marshal.ReleaseComObject(_sapModel);
+                Marshal.ReleaseComObject(_api);
+
+                _logger.LogInformation("COM references released");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error releasing COM objects: {Message}", ex.Message);
+            }
+        }
+        else
+        {
+            _logger.LogInformation("Skipping COM cleanup: not running on Windows platform");
         }
 
         GC.SuppressFinalize(this);

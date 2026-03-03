@@ -8,7 +8,7 @@
 		<!-- Package Identity -->
 		<Title>EtabSharp</Title>
 		<PackageId>EtabSharp</PackageId>
-		<Version>0.3.0-beta</Version>
+		<Version>0.3.1-beta</Version>
 		<Copyright>Copyright © Thanh Tu 2026</Copyright>
 		<Authors>Thanh Tu</Authors>
 
@@ -29,11 +29,8 @@
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>
-			v0.3.0-beta
-			* New IApplication interface wrapping the ETABS cOAPI object, with a concrete ETABSApplicationManager implementation to manage starting, hiding, and cleanly exiting ETABS.
-			* Safer application access via ETABSApplication.Application : IApplication; raw COM (cOAPI) and GetRawAPI()/GetRawModel() are now internal, and Close() routes through Application.ApplicationExit() for more robust shutdown.
-			* PID-aware instance attachment in ETABSWrapper: connections now target a specific ETABS process when possible, and a new ConnectToProcess(int pid) API lets callers attach to an exact running instance.
-
+			v0.3.1-beta
+			* Update dispose behavior correctly dispose of COM objects and release ETABS reference
 		</PackageReleaseNotes>
 
 		<!-- CI/CD Settings -->
