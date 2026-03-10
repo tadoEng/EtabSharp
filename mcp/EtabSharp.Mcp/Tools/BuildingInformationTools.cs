@@ -1,335 +1,228 @@
 ﻿using EtabSharp.Core;
+using EtabSharp.Mcp.Models;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
-using System.Text.Json;
 
 namespace EtabSharp.Mcp.Tools;
 
 /// <summary>
-/// MCP tools for retrieving building information from ETABS model
+/// MCP tools for retrieving building information from ETABS model.
 /// </summary>
 [McpServerToolType]
 public static class BuildingInformationTools
 {
-    [McpServerTool]
-    [Description("Get comprehensive building information including story count, heights, materials, sections, load patterns, and load cases from the active ETABS model")]
-    public static string GetBuildingInformation()
+    [McpServerTool(UseStructuredContent = true)]
+    [Description(
+        "Get comprehensive building information including story count, heights, materials, " +
+        "frame sections, area sections, load patterns, load cases, load combinations, and groups " +
+        "from the active ETABS model.")]
+    public static BuildingInformationResult GetBuildingInformation()
     {
         try
         {
-            // Connect to running ETABS instance
             var etabs = ETABSWrapper.Connect();
             if (etabs == null)
             {
-                return JsonSerializer.Serialize(new
-                {
-                    success = false,
-                    error = "No active ETABS instance found. Please open ETABS first."
-                });
+                return new BuildingInformationResult(
+                    Success: false,
+                    Error: "No active ETABS instance found. Please open ETABS first.",
+                    ModelInfo: null, Stories: null, Materials: null,
+                    FrameSections: null, AreaSections: null, LoadPatterns: null,
+                    LoadCases: null, LoadCombinations: null, Groups: null);
             }
 
             var model = etabs.Model;
-            var buildingInfo = new
-            {
-                success = true,
 
-                // Model Information
-                modelInfo = new
-                {
-                    filename = model.ModelInfo.GetModelFilepath(),
-                    version = model.ModelInfo.GetVersion(),
-                    units = new
-                    {
-                        force = model.Units.GetPresentUnits().Force.ToString(),
-                        length = model.Units.GetPresentUnits().Length.ToString(),
-                        temperature = model.Units.GetPresentUnits().Temperature.ToString()
-                    }
-                },
+            var unitResult = model.Units.GetPresentUnits();
+            var units = new UnitsInfo(
+                unitResult.Force.ToString(),
+                unitResult.Length.ToString(),
+                unitResult.Temperature.ToString());
 
-                // Story Information
-                stories = GetStoryInformation(model),
-
-                // Materials Summary
-                materials = GetMaterialsSummary(model),
-
-                // Frame Sections Summary
-                frameSections = GetFrameSectionsSummary(model),
-
-                // Area Sections Summary
-                areaSections = GetAreaSectionsSummary(model),
-
-                // Load Patterns
-                loadPatterns = GetLoadPatternsSummary(model),
-
-                // Load Cases
-                loadCases = GetLoadCasesSummary(model),
-
-                // Load Combinations
-                loadCombinations = GetLoadCombinationsSummary(model),
-
-                // Groups
-                groups = GetGroupsSummary(model)
-            };
-
-            return JsonSerializer.Serialize(buildingInfo, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
+            return new BuildingInformationResult(
+                Success: true,
+                Error: null,
+                ModelInfo: BuildModelInfo(model, units),
+                Stories: BuildStoryInfo(model),
+                Materials: BuildCategorySummary(model),
+                FrameSections: BuildFrameSectionsSummary(model),
+                AreaSections: BuildAreaSectionsSummary(model),
+                LoadPatterns: BuildLoadPatternsSummary(model),
+                LoadCases: BuildLoadCasesSummary(model),
+                LoadCombinations: BuildLoadCombinationsSummary(model),
+                Groups: BuildGroupsSummary(model)
+            );
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new
-            {
-                success = false,
-                error = ex.Message,
-                stackTrace = ex.StackTrace
-            });
+            return new BuildingInformationResult(
+                Success: false,
+                Error: ex.Message,
+                ModelInfo: null, Stories: null, Materials: null,
+                FrameSections: null, AreaSections: null, LoadPatterns: null,
+                LoadCases: null, LoadCombinations: null, Groups: null);
         }
     }
 
-    private static object GetStoryInformation(ETABSModel model)
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private static ModelInfoResult BuildModelInfo(ETABSModel model, UnitsInfo units) =>
+        new(
+            Filename: model.ModelInfo.GetModelFilepath(),
+            Version: model.ModelInfo.GetVersion(),
+            Units: units
+        );
+
+    private static StoryInfoResult BuildStoryInfo(ETABSModel model)
     {
         try
         {
-            var storyData = model.Story.GetStories();
-            var storyNames = storyData.StoryNames;
-            var storyHeights = storyData.StoryHeights;
-            var storyElevations = storyData.StoryElevations;
+            var data = model.Story.GetStories();
+            var totalHeight = data.StoryElevations.Length > 0
+                ? data.StoryElevations.Max() - data.StoryElevations.Min()
+                : 0;
 
-            return new
-            {
-                count = storyNames.Length,
-                stories = storyNames.Select((name, index) => new
-                {
-                    name = name,
-                    height = storyHeights[index],
-                    elevation = storyElevations[index],
-                    isMasterStory = storyData.IsMasterStory[index],
-                    similarToStory = storyData.SimilarToStory[index]
-                }).ToList(),
-                totalHeight = storyElevations.Max() - storyElevations.Min()
-            };
+            var stories = data.StoryNames.Select((name, i) => new StoryItem(
+                Name: name,
+                Height: data.StoryHeights[i],
+                Elevation: data.StoryElevations[i],
+                IsMasterStory: data.IsMasterStory[i],
+                SimilarToStory: data.SimilarToStory[i]
+            )).ToList();
+
+            return new StoryInfoResult(data.StoryNames.Length, totalHeight, stories);
         }
         catch (Exception ex)
         {
-            return new { error = $"Failed to get story information: {ex.Message}" };
+            return new StoryInfoResult(0, 0, new List<StoryItem>());
         }
     }
 
-    private static object GetMaterialsSummary(ETABSModel model)
+    private static CategorySummary BuildCategorySummary(ETABSModel model)
     {
         try
         {
             var allMaterials = model.Materials.GetNameList();
-            var materialsByType = new Dictionary<string, List<string>>();
-
-            foreach (var matName in allMaterials)
-            {
-                var (matType, _, _, _) = model.Materials.GetMaterial(matName);
-                var typeName = matType.ToString();
-
-                if (!materialsByType.ContainsKey(typeName))
-                    materialsByType[typeName] = new List<string>();
-
-                materialsByType[typeName].Add(matName);
-            }
-
-            return new
-            {
-                totalCount = allMaterials.Length,
-                byType = materialsByType.Select(kvp => new
+            var grouped = allMaterials
+                .GroupBy(name =>
                 {
-                    type = kvp.Key,
-                    count = kvp.Value.Count,
-                    materials = kvp.Value
-                }).ToList()
-            };
+                    var (matType, _, _, _) = model.Materials.GetMaterial(name);
+                    return matType.ToString();
+                })
+                .Select(g => new CategoryGroup(g.Key, g.Count(), g.ToList()))
+                .ToList();
+
+            return new CategorySummary(allMaterials.Length, grouped);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get materials: {ex.Message}" };
+            return new CategorySummary(0, new List<CategoryGroup>());
         }
     }
 
-    private static object GetFrameSectionsSummary(ETABSModel model)
+    private static CategorySummary BuildFrameSectionsSummary(ETABSModel model)
     {
         try
         {
             var sections = model.PropFrame.GetNameList();
-            var sectionsByType = new Dictionary<string, List<string>>();
+            var grouped = sections
+                .GroupBy(s => model.PropFrame.GetSectionType(s).ToString())
+                .Select(g => new CategoryGroup(g.Key, g.Count(), g.ToList()))
+                .ToList();
 
-            foreach (var section in sections)
-            {
-                var sectionType = model.PropFrame.GetSectionType(section).ToString();
-
-                if (!sectionsByType.ContainsKey(sectionType))
-                    sectionsByType[sectionType] = new List<string>();
-
-                sectionsByType[sectionType].Add(section);
-            }
-
-            return new
-            {
-                totalCount = sections.Length,
-                byType = sectionsByType.Select(kvp => new
-                {
-                    type = kvp.Key,
-                    count = kvp.Value.Count,
-                    sections = kvp.Value
-                }).ToList()
-            };
+            return new CategorySummary(sections.Length, grouped);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get frame sections: {ex.Message}" };
+            return new CategorySummary(0, new List<CategoryGroup>());
         }
     }
 
-    private static object GetAreaSectionsSummary(ETABSModel model)
+    private static CategorySummary BuildAreaSectionsSummary(ETABSModel model)
     {
         try
         {
             var sections = model.PropArea.GetNameList();
-            var sectionsByType = new Dictionary<string, List<string>>();
+            var grouped = sections
+                .GroupBy(s => model.PropArea.GetPropertyType(s).ToString())
+                .Select(g => new CategoryGroup(g.Key, g.Count(), g.ToList()))
+                .ToList();
 
-            foreach (var section in sections)
-            {
-                var propType = model.PropArea.GetPropertyType(section).ToString();
-
-                if (!sectionsByType.ContainsKey(propType))
-                    sectionsByType[propType] = new List<string>();
-
-                sectionsByType[propType].Add(section);
-            }
-
-            return new
-            {
-                totalCount = sections.Length,
-                byType = sectionsByType.Select(kvp => new
-                {
-                    type = kvp.Key,
-                    count = kvp.Value.Count,
-                    sections = kvp.Value
-                }).ToList()
-            };
+            return new CategorySummary(sections.Length, grouped);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get area sections: {ex.Message}" };
+            return new CategorySummary(0, new List<CategoryGroup>());
         }
     }
 
-    private static object GetLoadPatternsSummary(ETABSModel model)
+    private static CategorySummary BuildLoadPatternsSummary(ETABSModel model)
     {
         try
         {
             var patterns = model.LoadPatterns.GetNameList();
-            var patternsByType = new Dictionary<string, List<string>>();
+            var grouped = patterns
+                .GroupBy(p => model.LoadPatterns.GetLoadType(p).ToString())
+                .Select(g => new CategoryGroup(g.Key, g.Count(), g.ToList()))
+                .ToList();
 
-            foreach (var pattern in patterns)
-            {
-                var loadType = model.LoadPatterns.GetLoadType(pattern).ToString();
-
-                if (!patternsByType.ContainsKey(loadType))
-                    patternsByType[loadType] = new List<string>();
-
-                patternsByType[loadType].Add(pattern);
-            }
-
-            return new
-            {
-                totalCount = patterns.Length,
-                byType = patternsByType.Select(kvp => new
-                {
-                    type = kvp.Key,
-                    count = kvp.Value.Count,
-                    patterns = kvp.Value
-                }).ToList()
-            };
+            return new CategorySummary(patterns.Length, grouped);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get load patterns: {ex.Message}" };
+            return new CategorySummary(0, new List<CategoryGroup>());
         }
     }
 
-    private static object GetLoadCasesSummary(ETABSModel model)
+    private static CategorySummary BuildLoadCasesSummary(ETABSModel model)
     {
         try
         {
             var cases = model.LoadCases.GetNameList();
-            var casesByType = new Dictionary<string, List<string>>();
-
-            foreach (var caseName in cases)
-            {
-                var (caseType, _) = model.LoadCases.GetTypeOAPI(caseName);
-                var typeName = caseType.ToString();
-
-                if (!casesByType.ContainsKey(typeName))
-                    casesByType[typeName] = new List<string>();
-
-                casesByType[typeName].Add(caseName);
-            }
-
-            return new
-            {
-                totalCount = cases.Length,
-                byType = casesByType.Select(kvp => new
+            var grouped = cases
+                .GroupBy(c =>
                 {
-                    type = kvp.Key,
-                    count = kvp.Value.Count,
-                    cases = kvp.Value
-                }).ToList()
-            };
+                    var (caseType, _) = model.LoadCases.GetTypeOAPI(c);
+                    return caseType.ToString();
+                })
+                .Select(g => new CategoryGroup(g.Key, g.Count(), g.ToList()))
+                .ToList();
+
+            return new CategorySummary(cases.Length, grouped);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get load cases: {ex.Message}" };
+            return new CategorySummary(0, new List<CategoryGroup>());
         }
     }
 
-    private static object GetLoadCombinationsSummary(ETABSModel model)
+    private static LoadCombinationsResult BuildLoadCombinationsSummary(ETABSModel model)
     {
         try
         {
             var combos = model.LoadCombinations.GetNameList();
-
-            return new
-            {
-                totalCount = combos.Length,
-                combinations = combos.ToList()
-            };
+            return new LoadCombinationsResult(combos.Length, combos.ToList());
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get load combinations: {ex.Message}" };
+            return new LoadCombinationsResult(0, new List<string>());
         }
     }
 
-    private static object GetGroupsSummary(ETABSModel model)
+    private static GroupsResult BuildGroupsSummary(ETABSModel model)
     {
         try
         {
             var groups = model.Groups.GetNameList();
-            var groupDetails = groups.Select(groupName =>
-            {
-                var count = model.Groups.GetAssignmentCount(groupName);
-                return new
-                {
-                    name = groupName,
-                    objectCount = count
-                };
-            }).ToList();
+            var items = groups
+                .Select(name => new GroupItem(name, model.Groups.GetAssignmentCount(name)))
+                .ToList();
 
-            return new
-            {
-                totalCount = groups.Length,
-                groups = groupDetails
-            };
+            return new GroupsResult(groups.Length, items);
         }
-        catch (Exception ex)
+        catch
         {
-            return new { error = $"Failed to get groups: {ex.Message}" };
+            return new GroupsResult(0, new List<GroupItem>());
         }
     }
 }
