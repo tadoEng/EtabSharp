@@ -40,17 +40,17 @@ public static class BuildingInformationTools
                 unitResult.Temperature.ToString());
 
             return new BuildingInformationResult(
-                Success: true,
-                Error: null,
-                ModelInfo: BuildModelInfo(model, units),
-                Stories: BuildStoryInfo(model),
-                Materials: BuildCategorySummary(model),
-                FrameSections: BuildFrameSectionsSummary(model),
-                AreaSections: BuildAreaSectionsSummary(model),
-                LoadPatterns: BuildLoadPatternsSummary(model),
-                LoadCases: BuildLoadCasesSummary(model),
+                Success:          true,
+                Error:            null,
+                ModelInfo:        BuildModelInfo(model, units),
+                Stories:          BuildStoryInfo(model),
+                Materials:        BuildCategorySummary(model),
+                FrameSections:    BuildFrameSectionsSummary(model),
+                AreaSections:     BuildAreaSectionsSummary(model),
+                LoadPatterns:     BuildLoadPatternsSummary(model),
+                LoadCases:        BuildLoadCasesSummary(model),
                 LoadCombinations: BuildLoadCombinationsSummary(model),
-                Groups: BuildGroupsSummary(model)
+                Groups:           BuildGroupsSummary(model)
             );
         }
         catch (Exception ex)
@@ -69,8 +69,8 @@ public static class BuildingInformationTools
     private static ModelInfoResult BuildModelInfo(ETABSModel model, UnitsInfo units) =>
         new(
             Filename: model.ModelInfo.GetModelFilepath(),
-            Version: model.ModelInfo.GetVersion(),
-            Units: units
+            Version:  model.ModelInfo.GetVersion(),
+            Units:    units
         );
 
     private static StoryInfoResult BuildStoryInfo(ETABSModel model)
@@ -83,16 +83,16 @@ public static class BuildingInformationTools
                 : 0;
 
             var stories = data.StoryNames.Select((name, i) => new StoryItem(
-                Name: name,
-                Height: data.StoryHeights[i],
-                Elevation: data.StoryElevations[i],
-                IsMasterStory: data.IsMasterStory[i],
+                Name:           name,
+                Height:         data.StoryHeights[i],
+                Elevation:      data.StoryElevations[i],
+                IsMasterStory:  data.IsMasterStory[i],
                 SimilarToStory: data.SimilarToStory[i]
             )).ToList();
 
             return new StoryInfoResult(data.StoryNames.Length, totalHeight, stories);
         }
-        catch (Exception ex)
+        catch
         {
             return new StoryInfoResult(0, 0, new List<StoryItem>());
         }

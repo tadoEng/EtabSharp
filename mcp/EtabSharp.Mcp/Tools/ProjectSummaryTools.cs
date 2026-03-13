@@ -26,26 +26,26 @@ public static class ProjectSummaryTools
         var model = etabs.Model;
 
         // ── Model meta ──────────────────────────────────────────────────────
-        var filename = model.ModelInfo.GetModelFilepath();
-        var version = model.ModelInfo.GetVersion();
+        var filename   = model.ModelInfo.GetModelFilepath();
+        var version    = model.ModelInfo.GetVersion();
         var unitResult = model.Units.GetPresentUnits();
-        var units = new UnitsInfo(
+        var units      = new UnitsInfo(
             unitResult.Force.ToString(),
             unitResult.Length.ToString(),
             unitResult.Temperature.ToString());
 
         // ── Geometry counts ─────────────────────────────────────────────────
-        var storyData = model.Story.GetStories();
+        var storyData  = model.Story.GetStories();
         var storyCount = storyData.StoryNames.Length;
         var totalHeight = storyData.StoryElevations.Length > 0
             ? storyData.StoryElevations.Max() - storyData.StoryElevations.Min()
             : 0;
 
-        var materialCount = model.Materials.GetNameList().Length;
-        var frameCount = model.Frames.GetNameList().Length;
-        var areaCount = model.Areas.GetNameList().Length;
+        var materialCount    = model.Materials.GetNameList().Length;
+        var frameCount       = model.Frames.GetNameList().Length;
+        var areaCount        = model.Areas.GetNameList().Length;
         var loadPatternCount = model.LoadPatterns.GetNameList().Length;
-        var loadCaseCount = model.LoadCases.GetNameList().Length;
+        var loadCaseCount    = model.LoadCases.GetNameList().Length;
 
         // ── Base reactions (only if analysis has been run) ──────────────────
         BaseReactionSummary? reactions = null;
@@ -60,8 +60,8 @@ public static class ProjectSummaryTools
                 reactions = new BaseReactionSummary(
                     Count: react.Results.Count,
                     Reactions: react.Results.Select(r => new ReactionItem(
-                        LoadCase: r.LoadCase,
-                        StepType: r.StepType,
+                        LoadCase:   r.LoadCase,
+                        StepType:   r.StepType,
                         StepNumber: r.StepNum,
                         Fx: r.FX, Fy: r.FY, Fz: r.FZ,
                         Mx: r.MX, My: r.MY, Mz: r.MZ
@@ -75,18 +75,18 @@ public static class ProjectSummaryTools
         }
 
         return new ProjectSummary(
-            FileName: System.IO.Path.GetFileName(filename),
-            Version: version,
-            Units: units,
-            StoryCount: storyCount,
-            TotalHeight: totalHeight,
-            MaterialCount: materialCount,
-            FrameCount: frameCount,
-            AreaCount: areaCount,
+            FileName:        global::System.IO.Path.GetFileName(filename),
+            Version:         version,
+            Units:           units,
+            StoryCount:      storyCount,
+            TotalHeight:     totalHeight,
+            MaterialCount:   materialCount,
+            FrameCount:      frameCount,
+            AreaCount:       areaCount,
             LoadPatternCount: loadPatternCount,
-            LoadCaseCount: loadCaseCount,
+            LoadCaseCount:   loadCaseCount,
             AnalysisComplete: reactions != null,
-            BaseReactions: reactions
+            BaseReactions:   reactions
         );
     }
 }

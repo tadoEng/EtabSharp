@@ -132,6 +132,7 @@ Write-Host "Package Details:" -ForegroundColor Cyan
 Write-Host "  Version: $Version" -ForegroundColor White
 Write-Host "  Location: $($packageFile.FullName)" -ForegroundColor White
 Write-Host "  Size: $packageSize MB" -ForegroundColor White
+Write-Host "  Supported Frameworks: .NET 8.0, .NET 10.0" -ForegroundColor White
 Write-Host ""
 
 # Step 6: Verify package contents
