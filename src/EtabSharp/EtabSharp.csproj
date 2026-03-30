@@ -8,7 +8,7 @@
 		<!-- Package Identity -->
 		<Title>EtabSharp</Title>
 		<PackageId>EtabSharp</PackageId>
-		<Version>0.3.3-beta</Version>
+		<Version>0.3.4-beta</Version>
 		<Copyright>Copyright © Thanh Tu 2026</Copyright>
 		<Authors>Thanh Tu</Authors>
 
@@ -29,8 +29,8 @@
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>
-			v0.3.3-beta
-			* Update some packages to match minimum build
+			v0.3.4-beta
+			* Update to support for etabs 23
 		</PackageReleaseNotes>
 
 		
@@ -51,8 +51,8 @@
 	<PropertyGroup>
 		<!-- Detect ETABS installation for development -->
 		<EtabsDevPath Condition="Exists('$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll')">$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll</EtabsDevPath>
-		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
-		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsDevPath>
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsDevPath>
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(EtabsDevPath)' != ''">
