@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
 		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -8,7 +7,7 @@
 		<!-- Package Identity -->
 		<Title>EtabSharp</Title>
 		<PackageId>EtabSharp</PackageId>
-		<Version>0.3.2-beta</Version>
+		<Version>0.3.5-beta</Version>
 		<Copyright>Copyright © Thanh Tu 2026</Copyright>
 		<Authors>Thanh Tu</Authors>
 
@@ -23,20 +22,23 @@
 		<RepositoryType>git</RepositoryType>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 
-		<!-- Build setting-->
+		<!-- Build settings -->
 		<SignAssembly>True</SignAssembly>
 		<NoWarn>$(NoWarn);IDE0065;IDE0055;IDE0011;S3881;CS1591;CS1570</NoWarn>
 
 		<!-- Package Release Notes -->
 		<PackageReleaseNotes>
-			v0.3.1-beta
-			* Update dispose behavior correctly dispose of COM objects and release ETABS reference
-		</PackageReleaseNotes>
+			v0.3.5-beta
+			* Minimum supported ETABS version is now 22 (ETABSv1.dll API v2.0.0, .NET Standard 2.0)
+			* Added ETABS 24 and ETABS 23 to auto-detection order in .targets file (newest wins)
+			* Dropped ETABS 21 support — pre-v22 DLLs are COM-only and incompatible
+			* Added ExcludeFromSingleFile=true so ETABSv1.dll is never bundled inside
+			a PublishSingleFile exe (fixes API version mismatch error on hidden instance launch)
+			* Added EtabSharp_CopyEtabsDllToPublish target so dotnet publish reliably
+			copies ETABSv1.dll to the publish output folder alongside the exe
 
-		<!-- CI/CD Settings -->
-		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
-		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+			
+		</PackageReleaseNotes>
 	</PropertyGroup>
 
 	<!-- =========================
@@ -45,54 +47,61 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-		<PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
 	</ItemGroup>
 
 	<!-- =========================
        Development-only ETABS Reference
-       (Only used when building the library itself)
+       (Only used when building the library itself — not shipped in the package)
+       Detection order: lib\ folder first (local override), then newest ETABS install.
+       Minimum: ETABS 22 (.NET Standard 2.0 API, file version 2.0.0+)
        ========================= -->
 	<PropertyGroup>
-		<!-- Detect ETABS installation for development -->
+		<!-- Local lib\ override (highest priority — useful for CI or offline dev) -->
 		<EtabsDevPath Condition="Exists('$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll')">$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll</EtabsDevPath>
+
+		<!-- ETABS 24 (64-bit) -->
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsDevPath>
+		<!-- ETABS 24 (32-bit) -->
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsDevPath>
+
+		<!-- ETABS 23 (64-bit) -->
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsDevPath>
+		<!-- ETABS 23 (32-bit) -->
+		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsDevPath>
+
+		<!-- ETABS 22 (64-bit) — minimum supported -->
 		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
+		<!-- ETABS 22 (32-bit) — minimum supported -->
 		<EtabsDevPath Condition="'$(EtabsDevPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsDevPath>
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(EtabsDevPath)' != ''">
 		<Reference Include="ETABSv1">
 			<HintPath>$(EtabsDevPath)</HintPath>
-			<!-- 
-			Private=false because:
-			1. This is a CLASS LIBRARY - it doesn't need ETABSv1.dll in its output
-			2. The library doesn't ship with ETABSv1.dll
-			3. Consuming applications get ETABSv1.dll via the .targets file
+			<!--
+			Private=false: this is a class library — ETABSv1.dll is not shipped
+			with the package. Consuming applications receive it via EtabSharp.targets.
 			-->
 			<Private>false</Private>
 			<EmbedInteropTypes>false</EmbedInteropTypes>
 		</Reference>
 	</ItemGroup>
 
-	<!-- Show ETABS path during development build -->
+	<!-- Show ETABS dev path during build -->
 	<Target Name="ShowEtabsDevPath" BeforeTargets="CoreCompile">
 		<Message Text="[EtabSharp.csproj] ETABS dev reference: $(EtabsDevPath)" Importance="high" Condition="'$(EtabsDevPath)' != ''" />
-		<Warning Text="[EtabSharp.csproj] ETABS not found - build may fail. Install ETABS or place ETABSv1.dll in lib\ folder." Condition="'$(EtabsDevPath)' == ''" />
+		<Warning Text="[EtabSharp.csproj] ETABS not found — build may fail. Install ETABS 22+ or place ETABSv1.dll in lib\ folder." Condition="'$(EtabsDevPath)' == ''" />
 	</Target>
 
 	<!-- =========================
        Package Content
        ========================= -->
 	<ItemGroup>
-		<!-- Include the .targets file for auto-detection -->
+		<!-- .targets file runs automatically in consuming projects -->
 		<None Include="build\EtabSharp.targets" Pack="true" PackagePath="build\EtabSharp.targets" />
 		<None Include="build\EtabSharp.targets" Pack="true" PackagePath="buildTransitive\EtabSharp.targets" />
-
-		<!-- Include README -->
+		<!-- README -->
 		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
-
 	</ItemGroup>
-
-
-
 
 </Project>

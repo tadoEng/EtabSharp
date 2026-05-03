@@ -14,8 +14,8 @@ using ETABSv1;
 //  Mode B pattern:  app?.Application.ApplicationExit(false);  app?.Dispose();
 // ─────────────────────────────────────────────────────────────
 
-const string TEST_MODEL_PATH = @"D:\repo\bookmarkr\Nashville Hotel_V1.2_WIND.EDB";
-const string OUTPUT_DIR = @"D:\repo\bookmarkr\sidecar_test_output";
+const string TEST_MODEL_PATH = @"C:\Work\Code\tadoEng\TestModel\sidecar_test_output\.etabs-ext\main\v1\model.edb";
+const string OUTPUT_DIR = @"C:\Work\Code\tadoEng\TestModel\sidecar_test_output\.etabs-ext\main\v1\materials";
 
 Directory.CreateDirectory(OUTPUT_DIR);
 

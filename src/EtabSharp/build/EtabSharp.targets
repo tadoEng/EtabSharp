@@ -9,19 +9,35 @@
 
 	<!-- ========================================
          ETABS Installation Detection
-         Checks multiple versions and locations
+         Minimum supported: ETABS 22
+         
+         ETABS 22 introduced ETABSv1.dll as a .NET Standard 2.0 AnyCPU
+         library (API file version 2.0.0). Pre-v22 DLLs are COM-only and
+         incompatible with this library — do not add them here.
+         
+         Detection order: newest first so the highest installed version wins.
+         Override: set ETABS_INSTALL_DIR env var or MSBuild property.
          ======================================== -->
 	<PropertyGroup>
-		<!-- Check ETABS 22 (64-bit) - Primary -->
+		<!-- ETABS 24 (64-bit) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 24</EtabsInstallDir>
+
+		<!-- ETABS 24 (32-bit) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 24</EtabsInstallDir>
+
+		<!-- ETABS 23 (64-bit) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 23</EtabsInstallDir>
+
+		<!-- ETABS 23 (32-bit) -->
+		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 23</EtabsInstallDir>
+
+		<!-- ETABS 22 (64-bit) — minimum supported version -->
 		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22</EtabsInstallDir>
 
-		<!-- Check ETABS 22 (32-bit) -->
+		<!-- ETABS 22 (32-bit) — minimum supported version -->
 		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22</EtabsInstallDir>
 
-		<!-- Check ETABS 21 (fallback) -->
-		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 21\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 21</EtabsInstallDir>
-
-		<!-- Allow user override via MSBuild property or environment variable -->
+		<!-- User override via environment variable or MSBuild property -->
 		<EtabsInstallDir Condition="'$(EtabsInstallDir)' == '' AND '$(ETABS_INSTALL_DIR)' != ''">$(ETABS_INSTALL_DIR)</EtabsInstallDir>
 	</PropertyGroup>
 
@@ -35,9 +51,15 @@
 			CRITICAL FOR COM INTEROP:
 			- Private=true: Copy the DLL to output directory (required for runtime)
 			- EmbedInteropTypes=false: Don't embed types (causes runtime issues with COM)
+			- ExcludeFromSingleFile=true: Do NOT bundle into single-file exe.
+			  The DLL must be loaded from the real ETABS install at runtime.
+			  Bundling it causes the API version mismatch error:
+			  "The developer of the API client needs to update it to work with
+			   the latest version of the API."
 			-->
 			<Private>true</Private>
 			<EmbedInteropTypes>false</EmbedInteropTypes>
+			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
 		</Reference>
 	</ItemGroup>
 
@@ -73,6 +95,24 @@
 	</Target>
 
 	<!-- ========================================
+         Single-file publish: ensure ETABSv1.dll
+         sits next to the exe, never bundled inside.
+         ======================================== -->
+	<Target Name="EtabSharp_ExcludeFromBundle"
+	        AfterTargets="ComputeFilesToPublish"
+	        Condition="'$(PublishSingleFile)' == 'true' AND '$(EtabsInstallDir)' != ''">
+
+		<ItemGroup>
+			<!-- Remove ETABSv1.dll from the bundle so it is published as a
+			     loose file next to the exe. The exe will load it via the
+			     normal DLL search order from the ETABS install directory. -->
+			<FilesToExcludeFromBundle Include="$(EtabsInstallDir)\ETABSv1.dll" />
+		</ItemGroup>
+
+		<Message Text="[EtabSharp] PublishSingleFile: ETABSv1.dll excluded from bundle, will sit next to exe." Importance="high" />
+	</Target>
+
+	<!-- ========================================
          Build Diagnostics
          ======================================== -->
 	<Target Name="EtabSharp_DiagnosticInfo"
@@ -85,7 +125,7 @@
 	<Target Name="EtabSharp_WarnIfEtabsMissing"
 			BeforeTargets="Build"
 			Condition="'$(EtabsInstallDir)' == ''">
-		<Warning Text="[EtabSharp] ETABS installation not detected. ETABSv1.dll was not referenced automatically. ETABS functionality will not be available. Install ETABS 21+ or set ETABS_INSTALL_DIR environment variable to specify custom location." />
+		<Warning Text="[EtabSharp] ETABS installation not detected. ETABSv1.dll was not referenced automatically. ETABS functionality will not be available. Requires ETABS 22 or newer (.NET Standard 2.0 API, file version 2.0.0+). Install ETABS 22+ or set ETABS_INSTALL_DIR environment variable to specify a custom location." />
 	</Target>
 
 </Project>
