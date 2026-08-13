@@ -130,5 +130,3 @@ jobs:
           draft: false
           prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
           generateReleaseNotes: true
-
----
