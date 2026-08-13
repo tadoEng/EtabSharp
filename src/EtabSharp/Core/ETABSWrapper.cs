@@ -41,10 +41,10 @@ public static class ETABSWrapper
     /// The only member it touches on <paramref name="api"/> is <c>SapModel</c>.</para>
     ///
     /// <para><b>Ownership:</b> the caller owns the application lifecycle. Wrapping does not
-    /// transfer it. Disposing the returned wrapper releases COM references only — it does
-    /// not exit ETABS — so the caller must perform its own authoritative
-    /// <c>ApplicationExit(false)</c> and process-exit confirmation, and dispose only
-    /// afterwards.</para>
+    /// transfer it, and disposing the returned wrapper releases COM references only — it
+    /// never exits ETABS. When the caller is shutting that session down, it must request
+    /// the authoritative <c>ApplicationExit(false)</c> and resolve the process exit itself,
+    /// and dispose afterwards.</para>
     /// </summary>
     /// <param name="api">
     /// An existing, already-started API object. The exact instance is preserved; nothing
