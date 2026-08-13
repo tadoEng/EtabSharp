@@ -176,9 +176,18 @@ public sealed class ETABSApplication : IDisposable
     }
 
     /// <summary>
-    /// Disposes this wrapper. Calls ApplicationExit(false) — does NOT save.
-    /// For Mode A (attach) flows, do NOT dispose — release COM manually via ComCleanup.
-    /// For Mode B (hidden) flows, disposing is correct and will exit the hidden instance.
+    /// Disposes this wrapper by releasing its COM references. It does <b>not</b> call
+    /// <c>ApplicationExit</c> and does not shut ETABS down — the instance keeps running.
+    ///
+    /// <para>Shutting ETABS down is always an explicit caller action:
+    /// <c>app.Application.ApplicationExit(false)</c>. Dispose is never a substitute for
+    /// that call and must not be used before it; once the exit has been requested and the
+    /// process exit confirmed, disposing is the correct way to release the COM references
+    /// (CSI documents that the <c>cSapModel</c> reference should be dropped after
+    /// <c>ApplicationExit</c>).</para>
+    ///
+    /// <para>Safe in every mode — attach, hidden-instance, and <see cref="ETABSWrapper.WrapExisting"/>
+    /// — because it only releases references this wrapper holds.</para>
     /// </summary>
     public void Dispose()
     {

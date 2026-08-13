@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <OutputType>Exe</OutputType>
     <RootNamespace>EtabSharp.Test</RootNamespace>
-    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 	  <IsPackable>false</IsPackable>
 	  <IsTestProject>true</IsTestProject>
 
@@ -40,8 +40,19 @@
     <ProjectReference Include="..\..\src\EtabSharp\EtabSharp.csproj" />
   </ItemGroup>
 
+	<!--
+	Mirrors the detection order in src\EtabSharp\EtabSharp.csproj: local lib\ override
+	first, then newest installed ETABS. Without this the tests resolve ETABSv1 only from
+	an ETABS 22 install, so a machine with only ETABS 23/24 cannot compile a test that
+	names an ETABSv1 type.
+	-->
 	<PropertyGroup>
-		<EtabsPath Condition="Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="Exists('$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll')">$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
 		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
 	</PropertyGroup>
 
