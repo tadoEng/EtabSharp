@@ -9,9 +9,10 @@ namespace EtabSharp.Core;
 /// Factory for creating and connecting to ETABS v22+ instances.
 /// Returns ETABSApplication — the single entry point for all ETABS interaction.
 ///
-/// Two usage patterns:
-///   ETABSWrapper.Connect()    — Mode A: attach to user's running ETABS
-///   ETABSWrapper.CreateNew()  — Mode B: start a new hidden instance
+/// Three usage patterns:
+///   ETABSWrapper.Connect()      — Mode A: attach to the user's running ETABS
+///   ETABSWrapper.CreateNew()    — Mode B: start a new hidden instance
+///   ETABSWrapper.WrapExisting() — Mode C: wrap a cOAPI the caller created and started itself
 /// </summary>
 public static class ETABSWrapper
 {
@@ -20,6 +21,85 @@ public static class ETABSWrapper
     private const int MINIMUM_SUPPORTED_VERSION = 22;
 
     #region Public Factory Methods
+
+    /// <summary>
+    /// Mode C: wraps a <see cref="ETABSv1.cOAPI"/> the caller has <b>already created and
+    /// already started</b>, without performing any lifecycle action of its own.
+    ///
+    /// <para>This is deliberately low level. It exists for callers that must own the raw
+    /// CSI lifecycle and the exact OS process identity themselves — creating the object
+    /// with <c>cHelper.CreateObject(path)</c>, checking <c>cOAPI.ApplicationStart()</c>,
+    /// proving which process they own, and calling <c>cSapModel.InitializeNewModel()</c> —
+    /// and only then want EtabSharp's model and domain abstractions over that exact
+    /// instance. Callers that do not need that control should use
+    /// <see cref="Connect"/> or <see cref="CreateNew"/> instead.</para>
+    ///
+    /// <para>This method performs <b>no</b> lifecycle or discovery work: it does not create
+    /// an object, does not call <c>ApplicationStart</c>, does not attach through
+    /// <c>GetObject</c>/<c>GetObjectProcess</c> or the ROT, does not enumerate or select
+    /// ETABS processes, and never calls <c>Hide</c>, <c>Unhide</c> or <c>ApplicationExit</c>.
+    /// The only member it touches on <paramref name="api"/> is <c>SapModel</c>.</para>
+    ///
+    /// <para><b>Ownership:</b> the caller owns the application lifecycle. Wrapping does not
+    /// transfer it, and disposing the returned wrapper releases COM references only — it
+    /// never exits ETABS. When the caller is shutting that session down, it must request
+    /// the authoritative <c>ApplicationExit(false)</c> and resolve the process exit itself,
+    /// and dispose afterwards.</para>
+    /// </summary>
+    /// <param name="api">
+    /// An existing, already-started API object. The exact instance is preserved; nothing
+    /// is created or re-attached on the caller's behalf.
+    /// </param>
+    /// <param name="majorVersion">ETABS major version of the running instance (22 or newer).</param>
+    /// <param name="apiVersion">OAPI version reported by that instance; 0 if the caller could not read it.</param>
+    /// <param name="fullVersion">Full ETABS version string of the running instance, e.g. "23.3.0".</param>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="api"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="fullVersion"/> is null or blank.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="majorVersion"/> is below the minimum supported version, or
+    /// <paramref name="apiVersion"/> is negative.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="api"/> exposes no <c>SapModel</c>. An object that was never started
+    /// is not usable, and this method will not start it.
+    /// </exception>
+    public static ETABSApplication WrapExisting(
+        ETABSv1.cOAPI api,
+        int majorVersion,
+        double apiVersion,
+        string fullVersion,
+        ILogger<ETABSApplication>? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+
+        if (string.IsNullOrWhiteSpace(fullVersion))
+        {
+            throw new ArgumentException(
+                "Full version must be supplied by the caller; wrapping does not discover it.",
+                nameof(fullVersion));
+        }
+
+        if (majorVersion < MINIMUM_SUPPORTED_VERSION)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(majorVersion),
+                majorVersion,
+                $"ETABS v{MINIMUM_SUPPORTED_VERSION} is the minimum supported version.");
+        }
+
+        if (apiVersion < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(apiVersion),
+                apiVersion,
+                "OAPI version cannot be negative.");
+        }
+
+        // Unlike Connect/CreateNew this returns non-null or throws: the caller already holds
+        // a handle it proved, so a silent null would discard the reason wrapping failed.
+        return new ETABSApplication(api, majorVersion, apiVersion, fullVersion, logger);
+    }
 
     /// <summary>
     /// Mode A: Connects to the currently running ETABS instance (v22+).
