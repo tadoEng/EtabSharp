@@ -27,31 +27,31 @@ jobs:
           
           # Create minimal IL code for stub assembly
           $ilCode = @'
-.assembly extern mscorlib {}
-.assembly extern System.Runtime { .ver 4:0:0:0 }
+          .assembly extern mscorlib {}
+          .assembly extern System.Runtime { .ver 4:0:0:0 }
 
-.assembly ETABSv1
-{
-  .ver 1:0:0:0
-  .hash algorithm 0x00008004
-}
+          .assembly ETABSv1
+          {
+            .ver 1:0:0:0
+            .hash algorithm 0x00008004
+          }
 
-.module ETABSv1.dll
+          .module ETABSv1.dll
 
-// Minimal type to make assembly valid
-.class public auto ansi beforefieldinit ETABSv1.Helper
-       extends [mscorlib]System.Object
-{
-  .method public hidebysig specialname rtspecialname 
-          instance void .ctor() cil managed
-  {
-    .maxstack 8
-    ldarg.0
-    call instance void [mscorlib]System.Object::.ctor()
-    ret
-  }
-}
-'@
+          // Minimal type to make assembly valid
+          .class public auto ansi beforefieldinit ETABSv1.Helper
+                 extends [mscorlib]System.Object
+          {
+            .method public hidebysig specialname rtspecialname
+                    instance void .ctor() cil managed
+            {
+              .maxstack 8
+              ldarg.0
+              call instance void [mscorlib]System.Object::.ctor()
+              ret
+            }
+          }
+          '@
           
           # Save IL code to file
           $ilFile = Join-Path $env:TEMP "ETABSv1.il"
