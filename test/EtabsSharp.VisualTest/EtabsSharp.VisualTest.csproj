@@ -20,8 +20,20 @@
 	Note: For self-contained apps, we still manually reference because the
 	.targets file won't apply to the published single-file output.
 	-->
+	<!--
+	Same resolution order as src\EtabSharp and test\EtabSharp.Test: the tracked repo
+	lib\ETABSv1.dll first, then the newest installed ETABS. Resolving only from an
+	ETABS 22 install meant CI compiled this project against the synthesized stub
+	ETABSv1.dll (which defines one type), and a machine with only ETABS 23/24 resolved
+	nothing at all — both fail the solution build.
+	-->
 	<PropertyGroup>
-		<EtabsPath Condition="Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="Exists('$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll')">$(MSBuildThisFileDirectory)..\..\lib\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 24\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll</EtabsPath>
+		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
 		<EtabsPath Condition="'$(EtabsPath)' == '' AND Exists('C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll')">C:\Program Files (x86)\Computers and Structures\ETABS 22\ETABSv1.dll</EtabsPath>
 	</PropertyGroup>
 
